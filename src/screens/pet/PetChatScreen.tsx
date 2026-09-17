@@ -65,7 +65,6 @@ import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import { useSpeechOutput } from "../../hooks/useSpeechOutput";
 import { useBreedPhoto } from "../../hooks/useBreedPhoto";
 import { useImagePicker } from "../../hooks/useImagePicker";
-import { useMockColar } from "../../hooks/useMockColar";
 import { ChatResult, SuggestedAction } from "../../services/AiService";
 import { DarkColors, LightColors, Theme, useTheme } from "../../styles/theme";
 import RichText from "../../components/RichText";
@@ -100,8 +99,6 @@ type Metrics = {
   isTablet: boolean;
   /** >= 1080dp — tablets deitados, web */
   isWide: boolean;
-  /** >= 1300dp em paisagem — espaço de sobra para um 3º painel */
-  isDesktop: boolean;
   /** altura pequena: teclado aberto em telas curtas */
   isShort: boolean;
   isLandscape: boolean;
@@ -112,8 +109,6 @@ type Metrics = {
   /** largura máxima de um balão de mensagem */
   bubbleMaxWidth: number;
   drawerWidth: number;
-  /** > 0 quando há espaço para o painel fixo de números do pet */
-  statsPanelWidth: number;
   gutter: number;
   /** colunas do grid de triagem */
   triageColumns: number;
@@ -227,7 +222,6 @@ function useResponsive(): Metrics {
     const isWide = width >= 1080;
     const isShort = height < 680;
     const isLandscape = width > height;
-    const isDesktop = width >= 1300 && isLandscape;
 
     // Fator de escala tipográfica. Cresce devagar: texto de tablet
     // grande demais fica infantil, e o objetivo é conforto de leitura.
@@ -248,14 +242,8 @@ function useResponsive(): Metrics {
         ? Math.min(320, width * 0.28)
         : Math.min(340, width * 0.86);
 
-    // Painel fixo de números do pet: só cabe quando sobra espaço depois
-    // da sidebar + coluna de leitura confortável.
-    const statsPanelWidth = isDesktop ? Math.min(300, width * 0.19) : 0;
-
-    // Largura da área de chat depois de descontar a sidebar fixa e o painel.
-    const chatWidth =
-      (sidebarMode === "permanent" ? width - drawerWidth : width) -
-      statsPanelWidth;
+    // Largura da área de chat depois de descontar a sidebar fixa.
+    const chatWidth = sidebarMode === "permanent" ? width - drawerWidth : width;
 
     // Linha de leitura confortável fica abaixo de ~72 caracteres.
     const contentMaxWidth = Math.min(chatWidth, isWide ? 860 : 760);
@@ -274,14 +262,12 @@ function useResponsive(): Metrics {
       isCompact,
       isTablet,
       isWide,
-      isDesktop,
       isShort,
       isLandscape,
       sidebarMode,
       contentMaxWidth,
       bubbleMaxWidth,
       drawerWidth,
-      statsPanelWidth,
       gutter,
       triageColumns: isTablet ? 4 : 2,
       insets,
@@ -475,148 +461,6 @@ const FotoComFade = memo(function FotoComFade({
  * foto real da raça (busca sob demanda), com ícone de pata como último
  * recurso.
  */
-/**
- * Coração que pulsa no ritmo real do BPM simulado (batida a batida, não
- * um loop genérico) — quanto maior o BPM, mais rápido pulsa.
- */
-const BatimentoIcon = memo(function BatimentoIcon({
-  bpm,
-  cor,
-  reduceMotion,
-}: {
-  bpm: number;
-  cor: string;
-  reduceMotion: boolean;
-}) {
-  const escala = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (reduceMotion) return;
-
-    const duracaoBatida = 60000 / Math.max(30, bpm) / 2;
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(escala, {
-          toValue: 1.28,
-          duration: duracaoBatida,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(escala, {
-          toValue: 1,
-          duration: duracaoBatida,
-          easing: Easing.in(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [bpm, reduceMotion, escala]);
-
-  return (
-    <Animated.View style={{ transform: [{ scale: escala }] }}>
-      <Ionicons name="heart" size={20} color={cor} />
-    </Animated.View>
-  );
-});
-
-/** Termômetro com um brilho suave "respirando" — só pra dar sensação de
- * leitura ao vivo, sem ser tão chamativo quanto o batimento. */
-const TermometroIcon = memo(function TermometroIcon({
-  cor,
-  reduceMotion,
-}: {
-  cor: string;
-  reduceMotion: boolean;
-}) {
-  const opacidade = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (reduceMotion) return;
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacidade, {
-          toValue: 0.5,
-          duration: 1100,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacidade, {
-          toValue: 1,
-          duration: 1100,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, opacidade]);
-
-  return (
-    <Animated.View style={{ opacity: opacidade }}>
-      <Ionicons name="thermometer" size={20} color={cor} />
-    </Animated.View>
-  );
-});
-
-/**
- * Onda expandindo a partir do pino, tipo "radar" de localização ao vivo.
- */
-const LocalizacaoPulso = memo(function LocalizacaoPulso({
-  cor,
-  reduceMotion,
-}: {
-  cor: string;
-  reduceMotion: boolean;
-}) {
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (reduceMotion) return;
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 1800,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(anim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, anim]);
-
-  const escala = anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 2.4] });
-  const opacidade = anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
-
-  if (reduceMotion) return null;
-
-  return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        width: 26,
-        height: 26,
-        borderRadius: 13,
-        backgroundColor: cor,
-        transform: [{ scale: escala }],
-        opacity: opacidade,
-      }}
-    />
-  );
-});
-
 const DrawerPetAvatar = memo(function DrawerPetAvatar({
   pet,
   s,
@@ -1088,9 +932,6 @@ export default function PetChatScreen() {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [showTriage, setShowTriage] = useState(false);
-  const [showPetStats, setShowPetStats] = useState(false);
-  const [showAlertsDetail, setShowAlertsDetail] = useState(false);
-  const [showRiskDetail, setShowRiskDetail] = useState(false);
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null);
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [termoBusca, setTermoBusca] = useState("");
@@ -1571,23 +1412,6 @@ export default function PetChatScreen() {
   const riskCor =
     score >= 60 ? c.accentRed : score >= 30 ? c.accentOrange : c.accentGreen;
 
-  const petStats = useMemo(() => {
-    const vacinas = pet?.vaccines ?? [];
-    const medicacoes = pet?.medications ?? [];
-    const alertas = risk?.alerts ?? [];
-    const vacinasEmDia = vacinas.filter((v) => v.done).length;
-
-    return {
-      vacinasEmDia,
-      vacinasPendentes: vacinas.length - vacinasEmDia,
-      totalVacinas: vacinas.length,
-      medicacoesAtivas: medicacoes.filter((m) => m.active).length,
-      totalAlertas: alertas.length,
-      alertasCriticos: alertas.filter((a) => a.severity === "critico").length,
-      alertasAtencao: alertas.filter((a) => a.severity === "atencao").length,
-    };
-  }, [pet, risk]);
-
   const alertColor = (sev: AiAlert["severity"]) =>
     sev === "critico" ? c.accentRed : sev === "atencao" ? c.accentOrange : c.accentLight;
 
@@ -1604,7 +1428,6 @@ export default function PetChatScreen() {
   const mostrarAlertas = !sending && ultimaEhDaIa && alertasVisiveis.length > 0;
 
   const fotoRaca = useBreedPhoto(pet);
-  const colar = useMockColar(pet?.id);
 
   const petImage =
     (pet as any)?.imageUri ??
@@ -2062,282 +1885,6 @@ export default function PetChatScreen() {
   );
 
   /* ============================================================
-     PAINEL DE NÚMEROS DO PET
-  ============================================================ */
-
-  const cartoesPet: {
-    cor: string;
-    valor: string;
-    label: string;
-    sub: string;
-    onPress?: () => void;
-  }[] = [
-    {
-      cor: riskCor,
-      valor: risk ? `${risk.riskScore}` : "—",
-      label: "Risco atual",
-      sub: risk ? `Nível ${risk.riskLabel}` : "Sem avaliação",
-      onPress: () => setShowRiskDetail(true),
-    },
-    {
-      cor: c.accentGreen,
-      valor: `${petStats.vacinasEmDia}/${petStats.totalVacinas}`,
-      label: "Vacinas em dia",
-      sub:
-        petStats.vacinasPendentes > 0
-          ? `${petStats.vacinasPendentes} pendente(s)`
-          : "Nenhuma pendência",
-    },
-    {
-      cor: c.accentLight,
-      valor: `${petStats.medicacoesAtivas}`,
-      label: "Medicações ativas",
-      sub: petStats.medicacoesAtivas > 0 ? "Em uso agora" : "Nenhuma em uso",
-    },
-    {
-      cor: petStats.alertasCriticos > 0 ? c.accentRed : c.accentOrange,
-      valor: `${petStats.totalAlertas}`,
-      label: "Alertas ativos",
-      sub:
-        petStats.totalAlertas > 0
-          ? `${petStats.alertasCriticos} crítico(s), ${petStats.alertasAtencao} atenção`
-          : "Tudo tranquilo",
-      onPress: () => setShowAlertsDetail(true),
-    },
-  ];
-
-  const painelNumerosPet = (
-    <View style={s.statsPanelInner}>
-      <View style={s.statsPanelHeader}>
-        <View>
-          <Text style={s.statsPanelTitle}>
-            {pet ? `Números do ${pet.name}` : "Números do pet"}
-          </Text>
-          <Text style={s.statsPanelSubtitle}>
-            {pet?.species || pet?.breed
-              ? [pet.species, pet.breed].filter(Boolean).join(" · ")
-              : "Selecione um pet"}
-          </Text>
-        </View>
-        {!(r.statsPanelWidth > 0) && (
-          <Pressable
-            style={s.drawerIconBtn}
-            hitSlop={10}
-            onPress={() => setShowPetStats(false)}
-            accessibilityRole="button"
-            accessibilityLabel="Fechar números do pet"
-          >
-            <Ionicons name="close" size={18} color={c.textSecondary} />
-          </Pressable>
-        )}
-      </View>
-
-      <View style={s.statsPanelInfoRow}>
-        <View style={s.statsPanelInfoItem}>
-          <Text style={s.statsPanelInfoLabel}>Idade</Text>
-          <Text style={s.statsPanelInfoValue}>{pet?.age || "—"}</Text>
-        </View>
-        <View style={s.statsPanelInfoItem}>
-          <Text style={s.statsPanelInfoLabel}>Peso</Text>
-          <Text style={s.statsPanelInfoValue}>{pet?.weight || "—"}</Text>
-        </View>
-        <View style={s.statsPanelInfoItem}>
-          <Text style={s.statsPanelInfoLabel}>Checkup</Text>
-          <Text style={s.statsPanelInfoValue} numberOfLines={1}>
-            {pet?.nextCheckup || "—"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={s.statsCardsWrap}>
-        {cartoesPet.map((card, i) => {
-          const corpo = (
-            <View style={s.statCard}>
-              <View style={[s.statCardAccent, { backgroundColor: card.cor }]} />
-              <View style={s.statCardBody}>
-                <View style={s.statCardTopRow}>
-                  <Text style={s.statCardLabel}>{card.label}</Text>
-                  {card.onPress && (
-                    <Ionicons
-                      name="chevron-forward"
-                      size={13}
-                      color={c.textSecondary}
-                    />
-                  )}
-                </View>
-                <Text style={[s.statCardValue, { color: card.cor }]}>
-                  {card.valor}
-                </Text>
-                <Text style={s.statCardSub} numberOfLines={1}>
-                  {card.sub}
-                </Text>
-              </View>
-            </View>
-          );
-
-          return (
-            <Entrada key={card.label} disabled={reduceMotion} delay={i * 80}>
-              {card.onPress ? (
-                <Toque
-                  style={s.toqueFillColumn}
-                  onPress={card.onPress}
-                  reduceMotion={reduceMotion}
-                  accessibilityLabel={`${card.label}: ${card.valor}`}
-                >
-                  {corpo}
-                </Toque>
-              ) : (
-                corpo
-              )}
-            </Entrada>
-          );
-        })}
-      </View>
-
-      <View style={s.colarSecao}>
-        <View style={s.colarTituloRow}>
-          <Ionicons name="hardware-chip-outline" size={13} color={c.textSecondary} />
-          <Text style={s.colarTitulo}>Coleira ClyvoVet · dado de exemplo (POC)</Text>
-        </View>
-
-        <View style={s.statsCardsWrap}>
-          <Entrada disabled={reduceMotion} delay={cartoesPet.length * 80}>
-            <View style={s.statCard}>
-              <View
-                style={[
-                  s.statCardAccent,
-                  {
-                    backgroundColor:
-                      colar.bpm < 60 || colar.bpm > 130 ? c.accentOrange : c.accentRed,
-                  },
-                ]}
-              />
-              <View style={s.statCardBody}>
-                <View style={s.statCardTopRow}>
-                  <Text style={s.statCardLabel}>Batimentos</Text>
-                  <BatimentoIcon
-                    bpm={colar.bpm}
-                    cor={colar.bpm < 60 || colar.bpm > 130 ? c.accentOrange : c.accentRed}
-                    reduceMotion={reduceMotion}
-                  />
-                </View>
-                <Text
-                  style={[
-                    s.statCardValue,
-                    { color: colar.bpm < 60 || colar.bpm > 130 ? c.accentOrange : c.accentRed },
-                  ]}
-                >
-                  {colar.bpm}
-                  <Text style={s.statCardUnidade}> bpm</Text>
-                </Text>
-                <Text style={s.statCardSub}>Leitura simulada da coleira</Text>
-              </View>
-            </View>
-          </Entrada>
-
-          <Entrada disabled={reduceMotion} delay={cartoesPet.length * 80 + 80}>
-            <View style={s.statCard}>
-              <View
-                style={[
-                  s.statCardAccent,
-                  {
-                    backgroundColor:
-                      colar.temperatura < 38.3 || colar.temperatura > 39.2
-                        ? c.accentOrange
-                        : c.accentGreen,
-                  },
-                ]}
-              />
-              <View style={s.statCardBody}>
-                <View style={s.statCardTopRow}>
-                  <Text style={s.statCardLabel}>Temperatura</Text>
-                  <TermometroIcon
-                    cor={
-                      colar.temperatura < 38.3 || colar.temperatura > 39.2
-                        ? c.accentOrange
-                        : c.accentGreen
-                    }
-                    reduceMotion={reduceMotion}
-                  />
-                </View>
-                <Text
-                  style={[
-                    s.statCardValue,
-                    {
-                      color:
-                        colar.temperatura < 38.3 || colar.temperatura > 39.2
-                          ? c.accentOrange
-                          : c.accentGreen,
-                    },
-                  ]}
-                >
-                  {colar.temperatura.toFixed(1)}
-                  <Text style={s.statCardUnidade}>°C</Text>
-                </Text>
-                <Text style={s.statCardSub}>Leitura simulada da coleira</Text>
-              </View>
-            </View>
-          </Entrada>
-        </View>
-      </View>
-
-      <View style={s.colarSecao}>
-        <View style={s.colarTituloRow}>
-          <Ionicons name="hardware-chip-outline" size={13} color={c.textSecondary} />
-          <Text style={s.colarTitulo}>Localização em tempo real · dado de exemplo (POC)</Text>
-        </View>
-
-        <Entrada disabled={reduceMotion} delay={cartoesPet.length * 80 + 160}>
-          <View style={s.mapaCard}>
-            <View style={s.mapaVisual}>
-              <LocalizacaoPulso
-                cor={colar.emCasa ? c.accentGreen : c.accentLight}
-                reduceMotion={reduceMotion}
-              />
-              <View
-                style={[
-                  s.mapaPino,
-                  { backgroundColor: colar.emCasa ? c.accentGreen : c.accentLight },
-                ]}
-              >
-                <Ionicons name="paw" size={13} color="#FFF" />
-              </View>
-            </View>
-
-            <View style={s.mapaInfo}>
-              <View style={s.mapaStatusRow}>
-                <View
-                  style={[
-                    s.mapaStatusDot,
-                    { backgroundColor: colar.emCasa ? c.accentGreen : c.accentLight },
-                  ]}
-                />
-                <Text
-                  style={[
-                    s.mapaStatusTexto,
-                    { color: colar.emCasa ? c.accentGreen : c.accentLight },
-                  ]}
-                >
-                  {colar.emCasa ? "Em casa" : "Fora de casa"}
-                </Text>
-              </View>
-              <Text style={s.mapaLocalTexto} numberOfLines={1}>
-                {colar.localReferencia}
-              </Text>
-              <Text style={s.mapaDistanciaTexto}>
-                {colar.distanciaM === 0
-                  ? "No local de casa"
-                  : `~${colar.distanciaM} m de casa`}
-              </Text>
-              <Text style={s.mapaAtualizadoTexto}>Atualizado agora</Text>
-            </View>
-          </View>
-        </Entrada>
-      </View>
-    </View>
-  );
-
-  /* ============================================================
      RENDER
   ============================================================ */
 
@@ -2529,23 +2076,6 @@ export default function PetChatScreen() {
             />
           </Pressable>
 
-          {!(r.statsPanelWidth > 0) && (
-            <Pressable
-              style={({ pressed }) => [
-                s.headerButton,
-                s.headerButtonGap,
-                pressed && s.pressed,
-              ]}
-              onPress={() => setShowPetStats((v) => !v)}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Números do pet"
-              accessibilityState={{ expanded: showPetStats }}
-            >
-              <Ionicons name="bar-chart-outline" size={19} color={c.white} />
-            </Pressable>
-          )}
-
           <Pressable
             style={({ pressed }) => [
               s.headerButton,
@@ -2623,13 +2153,6 @@ export default function PetChatScreen() {
                 </Pressable>
               </View>
             </View>
-          </View>
-        )}
-
-        {/* PAINEL: NÚMEROS DO PET */}
-        {showPetStats && !(r.statsPanelWidth > 0) && (
-          <View style={s.painel}>
-            <View style={s.painelInner}>{painelNumerosPet}</View>
           </View>
         )}
 
@@ -3007,176 +2530,6 @@ export default function PetChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
-
-      {/* ---------- PAINEL FIXO DE NÚMEROS DO PET (desktop) ---------- */}
-      {r.statsPanelWidth > 0 && (
-        <View style={s.statsPanelFixo}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {painelNumerosPet}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* ---------- MODAL: DETALHE DOS ALERTAS ---------- */}
-      <Modal
-        visible={showAlertsDetail}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAlertsDetail(false)}
-      >
-        <Pressable
-          style={s.modalBackdrop}
-          onPress={() => setShowAlertsDetail(false)}
-        >
-          <Pressable style={s.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={s.painelHeader}>
-              <View>
-                <Text style={s.painelTitle}>Alertas ativos</Text>
-                <Text style={s.painelSubtitle}>
-                  {pet ? `Do prontuário do ${pet.name}` : "Do prontuário"}
-                </Text>
-              </View>
-              <Pressable
-                style={s.drawerIconBtn}
-                hitSlop={10}
-                onPress={() => setShowAlertsDetail(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Fechar alertas"
-              >
-                <Ionicons name="close" size={18} color={c.textSecondary} />
-              </Pressable>
-            </View>
-
-            {risk && risk.alerts.length > 0 ? (
-              <ScrollView style={s.modalScroll}>
-                {risk.alerts.map((a) => (
-                  <View
-                    key={a.code + a.title}
-                    style={[
-                      s.alertChip,
-                      { borderLeftColor: alertColor(a.severity) },
-                    ]}
-                  >
-                    <Ionicons
-                      name={alertIcon(a.severity)}
-                      size={16}
-                      color={alertColor(a.severity)}
-                    />
-                    <View style={s.alertChipContent}>
-                      <Text style={s.alertChipTitle}>{a.title}</Text>
-                      <Text style={s.alertChipDetail}>{a.detail}</Text>
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={s.modalVazio}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={28}
-                  color={c.accentGreen}
-                />
-                <Text style={s.modalVazioTexto}>
-                  Nenhum alerta ativo no momento.
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ---------- MODAL: DETALHE DO RISCO ---------- */}
-      <Modal
-        visible={showRiskDetail}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowRiskDetail(false)}
-      >
-        <Pressable
-          style={s.modalBackdrop}
-          onPress={() => setShowRiskDetail(false)}
-        >
-          <Pressable style={s.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={s.painelHeader}>
-              <View>
-                <Text style={s.painelTitle}>Risco atual</Text>
-                <Text style={s.painelSubtitle}>
-                  {pet ? `Avaliação de ${pet.name}` : "Avaliação"}
-                </Text>
-              </View>
-              <Pressable
-                style={s.drawerIconBtn}
-                hitSlop={10}
-                onPress={() => setShowRiskDetail(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Fechar detalhe do risco"
-              >
-                <Ionicons name="close" size={18} color={c.textSecondary} />
-              </Pressable>
-            </View>
-
-            <View style={s.riskDetailScoreRow}>
-              <Text style={[s.riskDetailScoreNumero, { color: riskCor }]}>
-                {risk?.riskScore ?? 0}
-              </Text>
-              <View style={s.riskDetailScoreInfo}>
-                <Text style={[s.riskDetailScoreLabel, { color: riskCor }]}>
-                  Nível {risk?.riskLabel ?? "—"}
-                </Text>
-                <Text style={s.riskDetailScoreFaixa}>
-                  0-29 baixo · 30-59 médio · 60-100 alto
-                </Text>
-              </View>
-            </View>
-
-            {risk && risk.alerts.length > 0 ? (
-              <>
-                <Text style={s.riskDetailFatoresTitulo}>
-                  De onde vem esse número
-                </Text>
-                <ScrollView style={s.modalScroll}>
-                  {[...risk.alerts]
-                    .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
-                    .map((a) => (
-                      <View key={a.code + a.title} style={s.riskFatorRow}>
-                        <View
-                          style={[
-                            s.riskFatorPontos,
-                            { backgroundColor: `${alertColor(a.severity)}22` },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              s.riskFatorPontosTexto,
-                              { color: alertColor(a.severity) },
-                            ]}
-                          >
-                            +{a.points ?? 0}
-                          </Text>
-                        </View>
-                        <View style={s.alertChipContent}>
-                          <Text style={s.alertChipTitle}>{a.title}</Text>
-                          <Text style={s.alertChipDetail}>{a.detail}</Text>
-                        </View>
-                      </View>
-                    ))}
-                </ScrollView>
-              </>
-            ) : (
-              <View style={s.modalVazio}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={28}
-                  color={c.accentGreen}
-                />
-                <Text style={s.modalVazioTexto}>
-                  Nenhum fator de risco identificado — por isso o nível está baixo.
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* ---------- MODAL: FOTO EM TELA CHEIA ---------- */}
       <Modal
@@ -4371,250 +3724,7 @@ const makeStyles = (theme: Theme, r: Metrics) => {
       shadowColor: c.accentRed,
     },
     toqueFillRow: { flex: 1 },
-    toqueFillColumn: { flex: 1 },
     toqueRowConteudo: { flex: 1, flexDirection: "row", alignItems: "center" },
-
-    /* ---------- PAINEL: NÚMEROS DO PET ---------- */
-    statsPanelFixo: {
-      width: r.statsPanelWidth,
-      backgroundColor: drawerBg,
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderLeftColor: overlay(0.1),
-      paddingTop: insets.top + sp(16),
-      paddingBottom: sp(16),
-    },
-    statsPanelInner: { paddingHorizontal: sp(16) },
-    statsPanelHeader: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      marginBottom: sp(14),
-    },
-    statsPanelTitle: {
-      color: c.text,
-      fontSize: fs(15),
-      fontWeight: "700",
-    },
-    statsPanelSubtitle: {
-      color: c.textSecondary,
-      fontSize: fs(11),
-      marginTop: 2,
-    },
-    statsPanelInfoRow: {
-      flexDirection: "row",
-      backgroundColor: tint(0.06),
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: tint(0.12),
-      paddingVertical: sp(10),
-      marginBottom: sp(14),
-    },
-    statsPanelInfoItem: {
-      flex: 1,
-      alignItems: "center",
-      paddingHorizontal: 4,
-    },
-    statsPanelInfoLabel: {
-      color: c.textSecondary,
-      fontSize: fs(10),
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 0.3,
-    },
-    statsPanelInfoValue: {
-      color: c.text,
-      fontSize: fs(13),
-      fontWeight: "700",
-      marginTop: 3,
-    },
-    statsCardsWrap: { gap: sp(10) },
-    statCard: {
-      flexDirection: "row",
-      backgroundColor: c.card,
-      borderRadius: 14,
-      overflow: "hidden",
-      borderWidth: 1,
-      borderColor: isDark ? c.border : overlay(0.05),
-    },
-    statCardAccent: { width: 4 },
-    statCardBody: {
-      flex: 1,
-      paddingVertical: sp(11),
-      paddingHorizontal: sp(13),
-    },
-    statCardTopRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    statCardLabel: {
-      color: c.textSecondary,
-      fontSize: fs(10),
-      fontWeight: "700",
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
-      flexShrink: 1,
-    },
-    statCardValue: {
-      fontSize: fs(27),
-      fontWeight: "800",
-      letterSpacing: -0.8,
-      marginTop: sp(3),
-    },
-    statCardSub: {
-      color: c.textSecondary,
-      fontSize: fs(11),
-      marginTop: 3,
-    },
-    statCardUnidade: {
-      fontSize: fs(13),
-      fontWeight: "600",
-    },
-
-    /* ---------- COLEIRA (POC / dados mockados) ---------- */
-    colarSecao: { marginTop: sp(18) },
-    colarTituloRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      marginBottom: sp(8),
-    },
-    colarTitulo: {
-      color: c.textSecondary,
-      fontSize: fs(10),
-      fontWeight: "700",
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-    },
-    mapaCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: sp(12),
-      backgroundColor: c.card,
-      borderRadius: 16,
-      padding: sp(13),
-      borderWidth: 1,
-      borderColor: isDark ? c.border : overlay(0.05),
-    },
-    mapaVisual: {
-      width: 72,
-      height: 72,
-      borderRadius: 16,
-      backgroundColor: tint(0.09),
-      alignItems: "center",
-      justifyContent: "center",
-      overflow: "hidden",
-    },
-    mapaPino: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 2,
-      borderColor: c.card,
-    },
-    mapaInfo: { flex: 1, minWidth: 0 },
-    mapaStatusRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-    mapaStatusDot: { width: 7, height: 7, borderRadius: 4 },
-    mapaStatusTexto: { fontSize: fs(12), fontWeight: "700" },
-    mapaLocalTexto: {
-      color: c.text,
-      fontSize: fs(14),
-      fontWeight: "700",
-      marginTop: 3,
-    },
-    mapaDistanciaTexto: {
-      color: c.textSecondary,
-      fontSize: fs(11),
-      marginTop: 2,
-    },
-    mapaAtualizadoTexto: {
-      color: c.textLight,
-      fontSize: fs(10),
-      marginTop: 3,
-    },
-
-    /* ---------- MODAL: DETALHE DOS ALERTAS ---------- */
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: "rgba(0,0,0,0.55)",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: sp(20),
-    },
-    modalCard: {
-      width: "100%",
-      maxWidth: 440,
-      maxHeight: "80%",
-      backgroundColor: c.card,
-      borderRadius: 20,
-      padding: sp(16),
-      elevation: 12,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.3,
-      shadowRadius: 20,
-    },
-    modalScroll: { marginTop: sp(4) },
-    riskDetailScoreRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: sp(14),
-      marginBottom: sp(16),
-      paddingBottom: sp(16),
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: isDark ? c.border : overlay(0.08),
-    },
-    riskDetailScoreNumero: {
-      fontSize: fs(40),
-      fontWeight: "800",
-      letterSpacing: -1,
-    },
-    riskDetailScoreInfo: { flex: 1 },
-    riskDetailScoreLabel: {
-      fontSize: fs(15),
-      fontWeight: "700",
-      textTransform: "capitalize",
-    },
-    riskDetailScoreFaixa: {
-      color: c.textSecondary,
-      fontSize: fs(11),
-      marginTop: 3,
-    },
-    riskDetailFatoresTitulo: {
-      color: c.textSecondary,
-      fontSize: fs(11),
-      fontWeight: "700",
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      marginBottom: sp(8),
-    },
-    riskFatorRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: sp(10),
-      marginBottom: sp(10),
-    },
-    riskFatorPontos: {
-      minWidth: 42,
-      height: 24,
-      borderRadius: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 6,
-    },
-    riskFatorPontosTexto: { fontSize: fs(11), fontWeight: "800" },
-    modalVazio: {
-      alignItems: "center",
-      paddingVertical: sp(28),
-      gap: 8,
-    },
-    modalVazioTexto: {
-      color: c.textSecondary,
-      fontSize: fs(13),
-      fontWeight: "600",
-    },
 
     /* ---------- MODAL: FOTO EM TELA CHEIA ---------- */
     fotoModalBackdrop: {
