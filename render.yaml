@@ -1,7 +1,8 @@
 services:
   # Frontend (Expo app exportado para web)
-  - type: static
+  - type: web
     name: clyvo-vet-web
+    env: static
     buildCommand: npm install && npx expo export --platform web
     staticPublishPath: ./dist
     envVars:
